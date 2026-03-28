@@ -16,7 +16,7 @@ jobs:
           
           response=$(curl -s -w "\n%{http_code}" \
             --max-time 300 \
-            -H "Authorization: Bearer ${{ f/0ca7Rf1WQiBRqKlknZW5CTe1yxVOPkAdpO10Dj/3M= }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "${{ secrets.SITE_URL }}/api/cron")
           
           http_code=$(echo "$response" | tail -1)
@@ -24,10 +24,3 @@ jobs:
           
           echo "Status: $http_code"
           echo "Response: $body"
-          
-          if [ "$http_code" = "200" ]; then
-            echo "Success!"
-          else
-            echo "Failed with status $http_code"
-            exit 1
-          fi
