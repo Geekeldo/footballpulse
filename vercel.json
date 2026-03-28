@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 8 * * *"
+    }
+  ],
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "functions": {
+    "app/api/cron/route.ts": { "maxDuration": 60 },
+    "app/api/articles/route.ts": { "maxDuration": 30 },
+    "app/api/social/route.ts": { "maxDuration": 30 },
+    "app/api/translate/route.ts": { "maxDuration": 30 }
+  }
+}
