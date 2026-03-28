@@ -24,3 +24,10 @@ jobs:
           
           echo "Status: $http_code"
           echo "Response: $body"
+          
+          if [ "$http_code" = "200" ]; then
+            echo "Success!"
+          else
+            echo "Failed with status $http_code"
+            exit 1
+          fi
