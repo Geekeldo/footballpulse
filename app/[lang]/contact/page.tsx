@@ -3,13 +3,20 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import ContactContent from './ContactContent';
 
 type Props = { params: { lang: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const titles: Record<string, string> = {
+    fr: 'Contact — FootballPulse',
+    en: 'Contact — FootballPulse',
+    ar: 'اتصل بنا — FootballPulse',
+    es: 'Contacto — FootballPulse',
+  };
   return {
-    title: 'Contact',
-    description: 'Contact the FootballPulse team.',
+    title: titles[params.lang] || titles.en,
+    description: 'Get in touch with the FootballPulse team. We\'d love to hear from you.',
   };
 }
 
@@ -21,26 +28,10 @@ export default function ContactPage({ params }: Props) {
   const lang = params.lang as Lang;
   if (!SUPPORTED_LANGS.includes(lang)) notFound();
 
-  const titles: Record<Lang, string> = {
-    fr: 'Contactez-nous', en: 'Contact Us', ar: 'اتصل بنا', es: 'Contáctenos',
-  };
-
   return (
     <div dir={isRTL(lang) ? 'rtl' : 'ltr'}>
       <Header lang={lang} />
-      <main className="max-w-3xl mx-auto px-4 py-12">
-        <h1 className="font-display text-4xl md:text-5xl mb-8" style={{ color: 'var(--ink)' }}>{titles[lang]}</h1>
-        <div className="prose prose-lg" style={{ color: 'var(--ink)' }}>
-          <div className="p-8 mb-8" style={{ border: '1px solid var(--border)', borderRadius: '8px' }}>
-            <h2>📧 Email</h2>
-            <p><a href="mailto:contact@footballpulse.site" style={{ color: 'var(--accent)' }}>contact@footballpulse.site</a></p>
-            <h2>🌐 Social Media</h2>
-            <p>Twitter · Instagram · Facebook</p>
-            <h2>📍 Information</h2>
-            <p>FootballPulse — Independent Football News Platform</p>
-          </div>
-        </div>
-      </main>
+      <ContactContent lang={lang} />
       <Footer lang={lang} />
     </div>
   );

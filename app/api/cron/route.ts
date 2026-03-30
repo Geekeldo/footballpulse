@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchTrendingNews, fetchTopHeadlines } from '@/lib/newsapi';
-import { generateAllLanguages } from '@/lib/ai';
+import { generateArticleAllLangs } from '@/lib/ai';
 import { supabaseAdmin } from '@/lib/supabase';
-import type { Lang } from '@/lib/i18n';
 
-export const maxDuration = 300; // 5 min — needed for 10 articles
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-// POST — called from admin dashboard
+// POST — admin dashboard
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   if (!body.adminPassword || body.adminPassword !== process.env.ADMIN_PASSWORD) {
@@ -16,7 +15,7 @@ export async function POST(req: NextRequest) {
   return runCron();
 }
 
-// GET — called by cron-job.org or Vercel cron
+// GET — GitHub Actions / cron-job.org
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -37,7 +36,7 @@ async function runCron() {
   const errors: string[] = [];
 
   try {
-    // 1. Fetch trending news (ask for 12, use up to 10)
+    // 1. Fetch news (12 items, use up to 10)
     let newsItems = await fetchTrendingNews(12);
     if (newsItems.length === 0) {
       newsItems = await fetchTopHeadlines(12);
@@ -48,10 +47,10 @@ async function runCron() {
 
     console.log(`[Cron] Got ${newsItems.length} news items, processing up to 10...`);
 
-    // 2. Process each news item (up to 10)
+    // 2. Process each news item
     for (const news of newsItems.slice(0, 10)) {
       try {
-        // Check for duplicate
+        // Check duplicate by source URL
         const { data: existing } = await supabaseAdmin
           .from('articles')
           .select('id')
@@ -59,26 +58,39 @@ async function runCron() {
           .limit(1);
 
         if (existing && existing.length > 0) {
-          console.log(`[Cron] Skipping duplicate: ${news.title.slice(0, 50)}`);
+          console.log(`[Cron] Skip duplicate: ${news.title.slice(0, 50)}`);
           continue;
         }
 
         const translationGroup = crypto.randomUUID();
 
-        // 3. ONE call = 4 languages via Groq/Gemini
+        // Generate in all 4 languages (Groq FR+EN, Cohere AR+ES, fallbacks)
         console.log(`[Cron] Generating: ${news.title.slice(0, 60)}...`);
-        const allArticles = await generateAllLanguages(
+        const allArticles = await generateArticleAllLangs(
           news.title,
           news.description,
           news.source
         );
 
-        // 4. Save all languages
-        for (const lang of ['fr', 'en', 'ar', 'es'] as Lang[]) {
+        // Save each language
+        for (const lang of ['fr', 'en', 'ar', 'es']) {
           try {
             const article = allArticles[lang];
             if (!article) {
-              errors.push(`Missing ${lang} for: ${news.title.slice(0, 40)}`);
+              errors.push(`No ${lang} for: ${news.title.slice(0, 30)}`);
+              continue;
+            }
+
+            // Check slug duplicate
+            const { data: slugExists } = await supabaseAdmin
+              .from('articles')
+              .select('id')
+              .eq('slug', article.slug)
+              .eq('lang', lang)
+              .limit(1);
+
+            if (slugExists && slugExists.length > 0) {
+              console.log(`[Cron] Slug exists: ${article.slug} (${lang})`);
               continue;
             }
 
@@ -105,12 +117,12 @@ async function runCron() {
           }
         }
 
-        // Small delay between articles (respect rate limits)
-        await new Promise(r => setTimeout(r, 3000));
+        // Delay between articles to respect all rate limits
+        await new Promise(r => setTimeout(r, 4000));
 
       } catch (articleError: any) {
-        errors.push(`"${news.title.slice(0, 40)}": ${articleError.message.slice(0, 100)}`);
-        console.error(`[Cron] Failed:`, articleError.message.slice(0, 150));
+        errors.push(`"${news.title.slice(0, 30)}": ${articleError.message.slice(0, 80)}`);
+        console.error(`[Cron] Failed:`, articleError.message.slice(0, 100));
       }
     }
 

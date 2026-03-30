@@ -1,8 +1,10 @@
+// app/layout.tsx
 import './globals.css';
 import type { Metadata } from 'next';
-import { Analytics } from '@vercel/analytics/react';
+import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { generateWebsiteSchema } from '@/lib/seo';
+import FPAnalytics from '@/components/Analytics';  // ← AJOUTER
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://footballpulse.site'),
@@ -28,8 +30,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
-        <Analytics />
-        <SpeedInsights />
+        <VercelAnalytics />    {/* Vercel Analytics — garde-le */}
+        <SpeedInsights />      {/* Vercel Speed — garde-le */}
+        <FPAnalytics />        {/* ← NOTRE tracking custom pour l'admin */}
       </body>
     </html>
   );

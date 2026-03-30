@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishToSocial } from '@/lib/social';
-import { generateAllSocialCaptions } from '@/lib/ai';
+import { generateWithGroq } from '@/lib/ai';
 import type { Article } from '@/lib/supabase';
-import type { Lang } from '@/lib/i18n';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,10 +13,7 @@ export async function POST(req: NextRequest) {
     };
 
     if (!articleId || !platforms || platforms.length === 0) {
-      return NextResponse.json(
-        { error: 'articleId and platforms[] required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'articleId and platforms[] required' }, { status: 400 });
     }
 
     const { data: article, error } = await supabaseAdmin
@@ -30,23 +26,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Article not found' }, { status: 404 });
     }
 
-    const lang = article.lang as Lang;
+    // Generate caption with Groq
+    const captionPrompt = `Write a short social media caption for this football article:
+Title: ${article.title}
+Excerpt: ${article.excerpt}
+Language: ${article.lang}
 
-    // ONE call = all captions
-    const allCaptions = await generateAllSocialCaptions({
-      [lang]: { title: article.title, excerpt: article.excerpt },
-    });
+Respond with JSON only: { "text": "the caption", "hashtags": ["tag1", "tag2"] }`;
 
-    const langCaptions = allCaptions[lang];
-    if (!langCaptions) {
-      return NextResponse.json({ error: 'Failed to generate captions' }, { status: 500 });
-    }
+    let caption = { text: article.title, hashtags: ['football'] };
+    try {
+      const raw = await generateWithGroq(captionPrompt, 'Social media expert. JSON only.');
+      const parsed = JSON.parse(raw.replace(/```json\s*/g, '').replace(/```/g, '').trim());
+      if (parsed.text) caption = parsed;
+    } catch {}
 
     const results = [];
     for (const platform of platforms) {
-      const caption = langCaptions[platform];
-      if (!caption) continue;
-
       const postResults = await publishToSocial(
         article as Article,
         [platform],

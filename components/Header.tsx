@@ -2,103 +2,71 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Menu, X, Search, Moon, Sun, Globe } from 'lucide-react';
+import { Menu, X, Moon, Sun, Globe, ChevronDown, Zap } from 'lucide-react';
 import { type Lang, t, SUPPORTED_LANGS, getLangName, isRTL } from '@/lib/i18n';
 
 export default function Header({ lang }: { lang: Lang }) {
   const [open, setOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [dark, setDark] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const tr = t(lang);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10);
-    window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   const toggleDark = () => {
     setDark(!dark);
     document.documentElement.classList.toggle('dark');
   };
 
-  const nav = [
-    { label: tr.latest, href: `/${lang}` },
+  const mainNav = [
+    { label: tr.home, href: `/${lang}` },
+    { label: lang === 'fr' ? 'Scores' : lang === 'ar' ? 'النتائج' : lang === 'es' ? 'Marcadores' : 'Scores', href: `/${lang}/livescore` },
+    { label: lang === 'fr' ? 'Classements' : lang === 'ar' ? 'الترتيب' : lang === 'es' ? 'Clasificaciones' : 'Standings', href: `/${lang}/standings` },
+    { label: lang === 'fr' ? 'Calendrier' : lang === 'ar' ? 'الجدول' : lang === 'es' ? 'Calendario' : 'Fixtures', href: `/${lang}/fixtures/premier-league` },
+    { label: lang === 'fr' ? 'Pronos' : lang === 'ar' ? 'التوقعات' : lang === 'es' ? 'Pronósticos' : 'Tips', href: `/${lang}/prono` },
     { label: tr.transfers, href: `/${lang}?cat=transfers` },
-    { label: tr.leagues, href: `/${lang}?cat=leagues` },
     { label: tr.analysis, href: `/${lang}?cat=analysis` },
   ];
 
+  const leagues = [
+    { label: 'Premier League', href: `/${lang}/standings/premier-league` },
+    { label: 'La Liga', href: `/${lang}/standings/la-liga` },
+    { label: 'Serie A', href: `/${lang}/standings/serie-a` },
+    { label: 'Bundesliga', href: `/${lang}/standings/bundesliga` },
+    { label: 'Ligue 1', href: `/${lang}/standings/ligue-1` },
+    { label: 'Champions League', href: `/${lang}/standings/champions-league` },
+  ];
+
   return (
-    <>
-      {/* Breaking news ticker */}
-      <div className="bg-ink text-paper text-xs py-1.5" style={{ background: 'var(--ink)', color: 'var(--paper)' }}>
-        <div className="ticker-wrap">
-          <div className="ticker-content">
-            <span className="inline-flex items-center gap-2 mx-8">
-              <span className="w-2 h-2 rounded-full bg-red-500" style={{ animation: 'pulseDot 1.5s ease infinite' }} />
-              <span className="font-bold uppercase tracking-widest text-[10px]" style={{ color: 'var(--accent)' }}>Live</span>
-              <span className="opacity-70">FootballPulse — {tr.siteDescription}</span>
-            </span>
-            <span className="inline-flex items-center gap-2 mx-8">
-              <span className="opacity-70">Breaking news, transfers & analysis in 4 languages</span>
-            </span>
-            <span className="inline-flex items-center gap-2 mx-8">
-              <span className="w-2 h-2 rounded-full bg-red-500" style={{ animation: 'pulseDot 1.5s ease infinite' }} />
-              <span className="font-bold uppercase tracking-widest text-[10px]" style={{ color: 'var(--accent)' }}>Live</span>
-              <span className="opacity-70">FootballPulse — {tr.siteDescription}</span>
-            </span>
-            <span className="inline-flex items-center gap-2 mx-8">
-              <span className="opacity-70">Breaking news, transfers & analysis in 4 languages</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main header */}
-      <header
-        className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? 'shadow-sm' : ''}`}
-        style={{ background: 'var(--paper)', borderBottom: '1px solid var(--border)' }}
-        dir={isRTL(lang) ? 'rtl' : 'ltr'}
-      >
-        {/* Top bar — logo centered, editorial style */}
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left actions */}
-            <div className="flex items-center gap-2 w-32">
-              <button onClick={() => setOpen(!open)} className="md:hidden p-2 hover:opacity-60 transition-opacity">
-                {open ? <X size={20} /> : <Menu size={20} />}
-              </button>
-              <button onClick={toggleDark} className="p-2 hover:opacity-60 transition-opacity">
-                {dark ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-            </div>
-
-            {/* Center logo */}
-            <Link href={`/${lang}`} className="text-center group">
-              <div className="font-display text-4xl md:text-5xl tracking-tight leading-none" style={{ color: 'var(--ink)' }}>
+    <header style={{ position: 'sticky', top: 0, zIndex: 50 }}>
+      {/* Top bar — dark */}
+      <div style={{ background: 'var(--nav-bg)', color: 'var(--nav-text)' }}>
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center justify-between h-12">
+            <Link href={`/${lang}`} className="flex items-center gap-2 group" dir="ltr">
+              <div className="w-7 h-7 rounded flex items-center justify-center" style={{ background: 'var(--accent)' }}>
+                <Zap size={14} color="white" />
+              </div>
+              <span className="text-base font-extrabold tracking-tight text-white">
                 Football<span style={{ color: 'var(--accent)' }}>Pulse</span>
-              </div>
-              <div className="text-[10px] uppercase tracking-[0.3em] mt-1" style={{ color: 'var(--muted)' }}>
-                The pulse of world football
-              </div>
+              </span>
             </Link>
 
-            {/* Right actions */}
-            <div className="flex items-center gap-2 w-32 justify-end">
-              <button className="p-2 hover:opacity-60 transition-opacity">
-                <Search size={18} />
+            <div className="flex items-center gap-1">
+              <button onClick={toggleDark} className="p-2 rounded hover:bg-white/10 transition-colors" style={{ color: 'var(--nav-text)' }}>
+                {dark ? <Sun size={16} /> : <Moon size={16} />}
               </button>
+
               <div className="relative">
-                <button onClick={() => setLangOpen(!langOpen)} className="flex items-center gap-1 px-2 py-1.5 text-xs font-bold uppercase tracking-wider hover:opacity-60 transition-opacity">
-                  <Globe size={14} /> {lang}
+                <button onClick={() => setLangOpen(!langOpen)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-white/10 transition-colors text-xs font-semibold uppercase"
+                  style={{ color: 'var(--nav-text)' }}>
+                  <Globe size={13} /> {lang} <ChevronDown size={11} />
                 </button>
                 {langOpen && (
-                  <div className="absolute right-0 top-full mt-2 py-1 min-w-[140px] z-50 border" style={{ background: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '8px', boxShadow: '0 12px 32px rgba(0,0,0,0.1)' }}>
+                  <div className="absolute right-0 top-full mt-1 py-1 min-w-[130px] z-50 rounded-lg overflow-hidden"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', animation: 'slideDown 0.15s ease' }}>
                     {SUPPORTED_LANGS.map(l => (
                       <Link key={l} href={`/${l}`} onClick={() => setLangOpen(false)}
-                        className="block px-4 py-2 text-sm transition-colors"
+                        className="block px-4 py-2 text-sm hover:bg-[var(--paper-warm)] transition-colors"
                         style={{ color: l === lang ? 'var(--accent)' : 'var(--ink)', fontWeight: l === lang ? 700 : 400 }}>
                         {getLangName(l)}
                       </Link>
@@ -106,38 +74,91 @@ export default function Header({ lang }: { lang: Lang }) {
                   </div>
                 )}
               </div>
+
+              <button onClick={() => setOpen(!open)} className="md:hidden p-2 rounded hover:bg-white/10 transition-colors" style={{ color: 'var(--nav-text)' }}>
+                {open ? <X size={18} /> : <Menu size={18} />}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Navigation bar */}
-        <nav className="border-t hidden md:block" style={{ borderColor: 'var(--border)' }}>
-          <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-8 py-3">
-            {nav.map((item, i) => (
-              <Link key={i} href={item.href}
-                className="text-sm font-bold uppercase tracking-wider hover-underline transition-opacity hover:opacity-70"
-                style={{ color: 'var(--ink)', letterSpacing: '0.08em' }}>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
-
-        {/* Mobile nav */}
-        {open && (
-          <nav className="md:hidden border-t" style={{ borderColor: 'var(--border)', background: 'var(--paper)' }}>
-            <div className="px-4 py-4 space-y-1">
-              {nav.map((item, i) => (
-                <Link key={i} href={item.href} onClick={() => setOpen(false)}
-                  className="block py-3 text-sm font-bold uppercase tracking-wider"
-                  style={{ color: 'var(--ink)', borderBottom: '1px solid var(--border)' }}>
+        {/* Nav bar */}
+        <nav className="border-t border-white/10" dir={isRTL(lang) ? 'rtl' : 'ltr'}>
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="hidden md:flex items-center gap-0 h-10">
+              {mainNav.map((item, i) => (
+                <Link key={i} href={item.href}
+                  className="px-3 h-full flex items-center text-[13px] font-semibold hover:bg-white/10 transition-colors"
+                  style={{ color: 'var(--nav-text)' }}>
+                  {item.label}
+                </Link>
+              ))}
+              <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.15)' }} />
+              {leagues.map((item, i) => (
+                <Link key={i} href={item.href}
+                  className="px-3 h-full flex items-center text-[12px] font-medium hover:bg-white/10 transition-colors"
+                  style={{ color: 'rgba(255,255,255,0.7)' }}>
                   {item.label}
                 </Link>
               ))}
             </div>
-          </nav>
-        )}
-      </header>
-    </>
+
+            <div className="md:hidden flex items-center gap-0 h-10 overflow-x-auto scrollbar-hide">
+              {mainNav.map((item, i) => (
+                <Link key={i} href={item.href}
+                  className="px-3 h-full flex items-center text-[12px] font-semibold whitespace-nowrap"
+                  style={{ color: 'var(--nav-text)' }}>
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      {/* Mobile expanded menu */}
+      {open && (
+        <div className="md:hidden" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', animation: 'slideDown 0.2s ease' }}
+          dir={isRTL(lang) ? 'rtl' : 'ltr'}>
+          <div className="px-4 py-3 space-y-0.5">
+            {mainNav.map((item, i) => (
+              <Link key={i} href={item.href} onClick={() => setOpen(false)}
+                className="block py-2.5 text-sm font-semibold"
+                style={{ color: 'var(--ink)', borderBottom: '1px solid var(--border)' }}>
+                {item.label}
+              </Link>
+            ))}
+            <div className="pt-2 pb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Leagues</span>
+            </div>
+            {leagues.map((item, i) => (
+              <Link key={i} href={item.href} onClick={() => setOpen(false)}
+                className="block py-2 text-sm"
+                style={{ color: 'var(--ink-secondary)', borderBottom: '1px solid var(--border)' }}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ticker — rouge accent */}
+      <div className="h-7 flex items-center overflow-hidden" style={{ background: 'var(--accent)', color: 'white' }}>
+        <div className="ticker-wrap flex-1">
+          <div className="ticker-content text-[11px] font-medium">
+            <span className="inline-flex items-center gap-2 mx-8">
+              <span className="w-1.5 h-1.5 rounded-full bg-white" style={{ animation: 'pulseDot 1.5s ease infinite' }} />
+              LIVE — FootballPulse
+            </span>
+            <span className="mx-8 opacity-80">{tr.siteDescription}</span>
+            <span className="inline-flex items-center gap-2 mx-8">
+              <span className="w-1.5 h-1.5 rounded-full bg-white" style={{ animation: 'pulseDot 1.5s ease infinite' }} />
+              LIVE — FootballPulse
+            </span>
+            <span className="mx-8 opacity-80">{tr.siteDescription}</span>
+          </div>
+        </div>
+      </div>
+    </header>
   );
 }
