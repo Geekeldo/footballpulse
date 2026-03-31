@@ -2,20 +2,19 @@ name: FootballPulse Auto Publish
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
   generate-articles:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Trigger Article Generation
+      - name: Generate Articles
         run: |
-          echo "Triggering FootballPulse cron..."
-          
           response=$(curl -s -w "\n%{http_code}" \
-            --max-time 300 \
+            --max-time 120 \
+            -X GET \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "${{ secrets.SITE_URL }}/api/cron")
           
@@ -25,7 +24,7 @@ jobs:
           echo "Status: $http_code"
           echo "Response: $body"
           
-          if [ "$http_code" = "200" ]; then
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
             echo "Success!"
           else
             echo "Failed with status $http_code"

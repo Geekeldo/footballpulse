@@ -53,9 +53,7 @@ function safeString(val: any): string {
   return String(val);
 }
 
-// ============================================================
-// GROQ — 14,400 req/day, 30 req/min
-// ============================================================
+// GROQ
 async function callGroq(prompt: string, systemPrompt: string): Promise<string> {
   if (!GROQ_KEY) throw new Error('No GROQ_API_KEY');
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -76,21 +74,21 @@ async function callGroq(prompt: string, systemPrompt: string): Promise<string> {
   return data.choices?.[0]?.message?.content || '';
 }
 
-// ============================================================
-// COHERE — v1 chat endpoint, command-r model
-// ============================================================
+// COHERE
 async function callCohere(prompt: string, systemPrompt: string): Promise<string> {
   if (!COHERE_KEY) throw new Error('No COHERE_API_KEY');
-  const res = await fetch('https://api.cohere.ai/v1/chat', {
+  const res = await fetch('https://api.cohere.com/v2/chat', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${COHERE_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'command-r',
-      message: prompt,
-      preamble: systemPrompt,
+      model: 'command-a-03-2025',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
       temperature: 0.7,
     }),
   });
@@ -99,12 +97,10 @@ async function callCohere(prompt: string, systemPrompt: string): Promise<string>
     throw new Error(`Cohere ${res.status}: ${errText.slice(0, 100)}`);
   }
   const data = await res.json();
-  return data.text || '';
+  return data.message?.content?.[0]?.text || '';
 }
 
-// ============================================================
-// GEMINI — 2.0-flash = 1,500 req/day (NOT 2.5-flash = 20/day)
-// ============================================================
+// GEMINI
 async function callGemini(prompt: string): Promise<string> {
   if (!GEMINI_KEY) throw new Error('No GEMINI_API_KEY');
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -114,17 +110,20 @@ async function callGemini(prompt: string): Promise<string> {
   return result.response.text();
 }
 
-// ============================================================
-// HUGGINGFACE — Qwen2.5-72B-Instruct (free, available)
-// ============================================================
+// HUGGINGFACE
 async function callHF(prompt: string, systemPrompt: string): Promise<string> {
   if (!HF_KEY) throw new Error('No HF_API_KEY');
-  const res = await fetch('https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct', {
+  const res = await fetch('https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      inputs: `<|im_start|>system\n${systemPrompt}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`,
-      parameters: { max_new_tokens: 3000, temperature: 0.7, return_full_text: false },
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 3000,
+      temperature: 0.7,
     }),
   });
   if (!res.ok) {
@@ -132,12 +131,10 @@ async function callHF(prompt: string, systemPrompt: string): Promise<string> {
     throw new Error(`HF ${res.status}: ${errText.slice(0, 100)}`);
   }
   const data = await res.json();
-  return data[0]?.generated_text || '';
+  return data.choices?.[0]?.message?.content || '';
 }
 
-// ============================================================
 // ARTICLE PROMPT
-// ============================================================
 function articlePrompt(title: string, description: string, source: string, lang: string): string {
   const langNames: Record<string, string> = { fr: 'French', en: 'English', ar: 'Arabic', es: 'Spanish' };
   return `Write a professional football news article in ${langNames[lang] || 'English'} based on:
@@ -159,9 +156,7 @@ Respond ONLY with valid JSON (no markdown, no code fences):
 
 const SYS = 'Professional football journalist. Valid JSON only. No markdown fences.';
 
-// ============================================================
 // GENERATE ONE ARTICLE with fallback chain
-// ============================================================
 async function generateOneArticle(
   title: string, description: string, source: string, lang: string,
   provider: 'groq' | 'cohere' | 'gemini' | 'hf'
@@ -169,7 +164,6 @@ async function generateOneArticle(
   const prompt = articlePrompt(title, description, source, lang);
   let text = '';
 
-  // Primary
   try {
     if (provider === 'groq') text = await callGroq(prompt, SYS);
     else if (provider === 'cohere') text = await callCohere(prompt, SYS);
@@ -180,13 +174,12 @@ async function generateOneArticle(
     console.log(`[AI] ${provider} failed for ${lang}: ${e.message.slice(0, 80)}`);
   }
 
-  // Fallbacks
   if (!text) {
     const fallbacks = ['groq', 'cohere', 'gemini', 'hf'].filter(p => p !== provider) as any[];
     for (const fb of fallbacks) {
       try {
         console.log(`[AI] Trying fallback ${fb} for ${lang}...`);
-        await new Promise(r => setTimeout(r, 3000)); // Wait before fallback
+        await new Promise(r => setTimeout(r, 2000));
         if (fb === 'groq') text = await callGroq(prompt, SYS);
         else if (fb === 'cohere') text = await callCohere(prompt, SYS);
         else if (fb === 'gemini') text = await callGemini(prompt);
@@ -220,39 +213,32 @@ async function generateOneArticle(
   };
 }
 
-// ============================================================
 // MAIN — Generate article in all 4 languages
-// Groq: FR+EN | Cohere: AR+ES | Gemini/HF: fallbacks
-// 5s delay between each call to respect all rate limits
-// ============================================================
+// Groq: FR+EN | Cohere: AR+ES | 4s delay between each
 export async function generateArticleAllLangs(
   newsTitle: string, newsDescription: string, newsSource: string
 ): Promise<Record<string, ArticleData>> {
   const results: Record<string, ArticleData> = {};
   const errors: string[] = [];
 
-  // FR → Groq
   try {
     results.fr = await generateOneArticle(newsTitle, newsDescription, newsSource, 'fr', 'groq');
   } catch (e: any) { errors.push(`FR: ${e.message}`); }
 
-  await new Promise(r => setTimeout(r, 5000));
+  await new Promise(r => setTimeout(r, 3000));
 
-  // EN → Groq
   try {
     results.en = await generateOneArticle(newsTitle, newsDescription, newsSource, 'en', 'groq');
   } catch (e: any) { errors.push(`EN: ${e.message}`); }
 
-  await new Promise(r => setTimeout(r, 5000));
+  await new Promise(r => setTimeout(r, 3000));
 
-  // AR → Cohere
   try {
     results.ar = await generateOneArticle(newsTitle, newsDescription, newsSource, 'ar', 'cohere');
   } catch (e: any) { errors.push(`AR: ${e.message}`); }
 
-  await new Promise(r => setTimeout(r, 5000));
+  await new Promise(r => setTimeout(r, 3000));
 
-  // ES → Cohere
   try {
     results.es = await generateOneArticle(newsTitle, newsDescription, newsSource, 'es', 'cohere');
   } catch (e: any) { errors.push(`ES: ${e.message}`); }
@@ -261,9 +247,7 @@ export async function generateArticleAllLangs(
   return results;
 }
 
-// ============================================================
-// EXPORTS for other modules
-// ============================================================
+// EXPORTS
 export async function generateWithGemini(prompt: string): Promise<string> {
   return callGemini(prompt);
 }

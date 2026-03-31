@@ -3,7 +3,7 @@ import { fetchTrendingNews, fetchTopHeadlines } from '@/lib/newsapi';
 import { generateArticleAllLangs } from '@/lib/ai';
 import { supabaseAdmin } from '@/lib/supabase';
 
-export const maxDuration = 300;
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 // POST — admin dashboard
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   return runCron();
 }
 
-// GET — GitHub Actions / cron-job.org
+// GET — GitHub Actions / cron
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -36,19 +36,30 @@ async function runCron() {
   const errors: string[] = [];
 
   try {
-    // 1. Fetch news (12 items, use up to 10)
-    let newsItems = await fetchTrendingNews(12);
+    // 1. Fetch news (ask for 8, use up to 3 to stay under 60s)
+    let newsItems = await fetchTrendingNews(8);
     if (newsItems.length === 0) {
-      newsItems = await fetchTopHeadlines(12);
+      newsItems = await fetchTopHeadlines(8);
     }
     if (newsItems.length === 0) {
-      throw new Error('No news items found from any source');
+      // No news = success with 0 articles (not an error)
+      await supabaseAdmin
+        .from('cron_logs')
+        .update({
+          finished_at: new Date().toISOString(),
+          articles_created: 0,
+          status: 'success',
+          details: { message: 'No new news items found' },
+        })
+        .eq('id', cronId);
+
+      return NextResponse.json({ success: true, articlesCreated: 0, message: 'No new news' });
     }
 
-    console.log(`[Cron] Got ${newsItems.length} news items, processing up to 10...`);
+    console.log(`[Cron] Got ${newsItems.length} news items, processing up to 3...`);
 
-    // 2. Process each news item
-    for (const news of newsItems.slice(0, 10)) {
+    // 2. Process up to 3 articles (3 articles × 4 langs × 4s = ~48s < 60s limit)
+    for (const news of newsItems.slice(0, 3)) {
       try {
         // Check duplicate by source URL
         const { data: existing } = await supabaseAdmin
@@ -64,7 +75,7 @@ async function runCron() {
 
         const translationGroup = crypto.randomUUID();
 
-        // Generate in all 4 languages (Groq FR+EN, Cohere AR+ES, fallbacks)
+        // Generate in all 4 languages
         console.log(`[Cron] Generating: ${news.title.slice(0, 60)}...`);
         const allArticles = await generateArticleAllLangs(
           news.title,
@@ -117,8 +128,8 @@ async function runCron() {
           }
         }
 
-        // Delay between articles to respect all rate limits
-        await new Promise(r => setTimeout(r, 4000));
+        // Small delay between articles
+        await new Promise(r => setTimeout(r, 2000));
 
       } catch (articleError: any) {
         errors.push(`"${news.title.slice(0, 30)}": ${articleError.message.slice(0, 80)}`);

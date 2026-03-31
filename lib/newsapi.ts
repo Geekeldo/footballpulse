@@ -7,126 +7,182 @@ export type NewsItem = {
   publishedAt: string;
 };
 
-const FOOTBALL_QUERIES = [
-  'football transfer news',
-  'Champions League',
-  'Premier League results',
-  'La Liga football',
-  'World Cup football',
-  'Bundesliga news',
-  'Serie A football',
-  'African football',
-  'Ligue 1 football',
-  'football tactics analysis',
+// ===== RSS FEEDS — FREE, UNLIMITED, ALWAYS FRESH =====
+const RSS_FEEDS = [
+  { url: 'https://www.espn.com/espn/rss/soccer/news', name: 'ESPN FC' },
+  { url: 'https://www.goal.com/feeds/en/news', name: 'GOAL' },
+  { url: 'https://www.football365.com/feed', name: 'Football365' },
+  { url: 'https://sportstar.thehindu.com/rss/football/feeder/default.rss', name: 'Sportstar' },
+  { url: 'https://www.marca.com/en/rss/football.xml', name: 'Marca' },
+  { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', name: 'BBC Sport' },
+  { url: 'https://www.skysports.com/rss/12040', name: 'Sky Sports' },
+  { url: 'https://www.football-italia.net/feed', name: 'Football Italia' },
+  { url: 'https://onefootball.com/en/feeds/rss', name: 'OneFootball' },
+  { url: 'https://theathletic.com/rss/news/', name: 'The Athletic' },
 ];
 
-// ===== STRATEGY 1: NewsAPI (localhost only on free plan) =====
-async function tryNewsAPI(count: number): Promise<NewsItem[]> {
-  const apiKey = process.env.NEWSAPI_KEY;
-  if (!apiKey) return [];
+// Simple XML parser for RSS (no dependencies needed)
+function parseRSSItems(xml: string, sourceName: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+  let match;
 
-  const qi = Math.floor(Date.now() / 1800000) % FOOTBALL_QUERIES.length;
-  try {
-    const url = new URL('https://newsapi.org/v2/everything');
-    url.searchParams.set('q', FOOTBALL_QUERIES[qi]);
-    url.searchParams.set('language', 'en');
-    url.searchParams.set('sortBy', 'publishedAt');
-    url.searchParams.set('pageSize', String(count));
-    url.searchParams.set('apiKey', apiKey);
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const block = match[1];
+    const title = block.match(/<title><!\[CDATA\[(.*?)\]\]>|<title>(.*?)<\/title>/)?.[1] || block.match(/<title>(.*?)<\/title>/)?.[1] || '';
+    const desc = block.match(/<description><!\[CDATA\[(.*?)\]\]>|<description>(.*?)<\/description>/)?.[1] || block.match(/<description>(.*?)<\/description>/)?.[1] || '';
+    const link = block.match(/<link>(.*?)<\/link>/)?.[1] || '';
+    const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
+    const image = block.match(/<media:content[^>]*url="([^"]+)"/)?.[1]
+      || block.match(/<enclosure[^>]*url="([^"]+)"/)?.[1]
+      || block.match(/<media:thumbnail[^>]*url="([^"]+)"/)?.[1]
+      || null;
 
-    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'FootballPulse/1.0' } });
-    if (!res.ok) { console.log(`[NewsAPI] ${res.status}`); return []; }
-
-    const data = await res.json();
-    return (data.articles || [])
-      .filter((a: any) => a.title && a.description && a.title !== '[Removed]')
-      .map((a: any) => ({
-        title: a.title, description: a.description,
-        source: a.source?.name || 'Unknown', url: a.url,
-        imageUrl: a.urlToImage || null, publishedAt: a.publishedAt,
-      }));
-  } catch (e: any) { console.log(`[NewsAPI] ${e.message}`); return []; }
+    if (title && title.length > 10) {
+      // Strip HTML tags from description
+      const cleanDesc = desc.replace(/<[^>]+>/g, '').trim().slice(0, 300);
+      items.push({
+        title: title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#039;/g, "'").replace(/&quot;/g, '"').trim(),
+        description: cleanDesc || title,
+        source: sourceName,
+        url: link.trim(),
+        imageUrl: image,
+        publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+      });
+    }
+  }
+  return items;
 }
 
-// ===== STRATEGY 2: GNews.io (free, works in production) =====
-// Sign up at https://gnews.io — 100 req/day free, works on deployed servers
-// Add GNEWS_API_KEY to your env variables
+// Filter out non-soccer content
+function isSoccer(title: string, desc: string): boolean {
+  const text = `${title} ${desc}`.toLowerCase();
+  const nflTerms = ['nfl', 'touchdown', 'quarterback', 'super bowl', 'nba', 'nhl', 'mlb', 'baseball', 'basketball', 'hockey', 'american football', 'patriots', 'cowboys', '49ers', 'chiefs', 'packers', 'steelers', 'eagles philadelphia', 'tennis', 'cricket', 'rugby', 'f1', 'formula 1', 'golf'];
+  if (nflTerms.some(t => text.includes(t))) return false;
+
+  // Must contain at least one soccer term
+  const soccerTerms = ['football', 'soccer', 'premier league', 'champions league', 'la liga', 'serie a', 'bundesliga', 'ligue 1', 'transfer', 'goal', 'match', 'striker', 'midfielder', 'defender', 'manager', 'coach', 'uefa', 'fifa', 'world cup', 'penalty', 'red card', 'offside', 'fc ', ' fc', 'united', 'city', 'arsenal', 'liverpool', 'chelsea', 'barcelona', 'real madrid', 'psg', 'bayern', 'juventus', 'inter', 'milan', 'dortmund', 'atletico'];
+  return soccerTerms.some(t => text.includes(t));
+}
+
+// ===== STRATEGY 1: RSS FEEDS (unlimited, free) =====
+async function tryRSS(count: number): Promise<NewsItem[]> {
+  const allItems: NewsItem[] = [];
+
+  // Pick 4 random feeds each run for variety
+  const shuffled = [...RSS_FEEDS].sort(() => Math.random() - 0.5).slice(0, 4);
+
+  for (const feed of shuffled) {
+    try {
+      const res = await fetch(feed.url, {
+        headers: { 'User-Agent': 'FootballPulse/1.0' },
+        signal: AbortSignal.timeout(5000), // 5s timeout per feed
+      });
+      if (!res.ok) continue;
+
+      const xml = await res.text();
+      const items = parseRSSItems(xml, feed.name);
+      const filtered = items.filter(i => isSoccer(i.title, i.description));
+      allItems.push(...filtered);
+      console.log(`[RSS] ${feed.name}: ${filtered.length} soccer articles`);
+    } catch (e: any) {
+      console.log(`[RSS] ${feed.name} failed: ${e.message.slice(0, 50)}`);
+    }
+  }
+
+  // Sort by date descending, deduplicate by similar titles
+  allItems.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+  // Deduplicate by similar title (first 40 chars)
+  const seen = new Set<string>();
+  const unique = allItems.filter(item => {
+    const key = item.title.toLowerCase().slice(0, 40);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  console.log(`[RSS] Total unique soccer articles: ${unique.length}`);
+  return unique.slice(0, count);
+}
+
+// ===== STRATEGY 2: GNews (100 req/day, use sparingly) =====
 async function tryGNews(count: number): Promise<NewsItem[]> {
   const apiKey = process.env.GNEWS_API_KEY;
   if (!apiKey) return [];
 
-    const qi = Math.floor(Date.now() / 1800000) % FOOTBALL_QUERIES.length;
+  // Simple rotating queries
+  const queries = [
+    'football transfer', 'Champions League', 'Premier League',
+    'La Liga', 'Serie A', 'Bundesliga', 'World Cup 2026',
+  ];
+  const qi = Math.floor(Date.now() / 3600000) % queries.length; // Rotate hourly (not every 10 min!)
+  const query = queries[qi];
+
   try {
     const url = new URL('https://gnews.io/api/v4/search');
-    url.searchParams.set('q', FOOTBALL_QUERIES[qi]);
+    url.searchParams.set('q', query);
     url.searchParams.set('lang', 'en');
-    url.searchParams.set('max', String(count));
+    url.searchParams.set('max', String(Math.min(count, 10)));
     url.searchParams.set('sortby', 'publishedAt');
     url.searchParams.set('apikey', apiKey);
 
     const res = await fetch(url.toString());
-    if (!res.ok) { console.log(`[GNews] ${res.status}`); return []; }
+    if (!res.ok) {
+      console.log(`[GNews] ${res.status}`);
+      return [];
+    }
 
     const data = await res.json();
     return (data.articles || [])
-      .filter((a: any) => a.title && a.description)
+      .filter((a: any) => a.title && a.description && isSoccer(a.title, a.description))
       .map((a: any) => ({
-        title: a.title, description: a.description,
-        source: a.source?.name || 'Unknown', url: a.url,
-        imageUrl: a.image || null, publishedAt: a.publishedAt,
+        title: a.title,
+        description: a.description,
+        source: a.source?.name || 'Unknown',
+        url: a.url,
+        imageUrl: a.image || null,
+        publishedAt: a.publishedAt,
       }));
-  } catch (e: any) { console.log(`[GNews] ${e.message}`); return []; }
+  } catch (e: any) {
+    console.log(`[GNews] ${e.message}`);
+    return [];
+  }
 }
 
-// ===== STRATEGY 3: Gemini generates trending topics (zero API cost) =====
-// Ultimate fallback — AI creates realistic trending topics based on current date
-async function tryGeminiTopics(count: number): Promise<NewsItem[]> {
-  try {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    const today = new Date().toISOString().split('T')[0];
-    const prompt = `You are a football news editor. Generate ${count} realistic trending football news headlines for today (${today}).
-Cover CURRENT events: transfers, match results, injuries, tactical changes, manager news.
-Mix leagues: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Champions League, African football.
-Make headlines realistic, specific (use real team/player names), and timely.
-
-Respond ONLY with a JSON array (no markdown):
-[{"title":"...","description":"2-3 sentence summary","source":"realistic source name like BBC Sport or Marca"}]`;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(text);
-
-    return parsed.slice(0, count).map((item: any, i: number) => ({
-      title: item.title,
-      description: item.description,
-      source: item.source || 'FootballPulse AI',
-      url: `https://footballpulse.site/generated-${Date.now()}-${i}`,
-      imageUrl: null,
-      publishedAt: new Date().toISOString(),
-    }));
-  } catch (e: any) { console.log(`[Gemini Topics] ${e.message}`); return []; }
-}
-
-// ===== MAIN: tries all strategies in order =====
-export async function fetchTrendingNews(count: number = 3): Promise<NewsItem[]> {
+// ===== MAIN: RSS first (unlimited), GNews backup =====
+export async function fetchTrendingNews(count: number = 10): Promise<NewsItem[]> {
   console.log('[News] Fetching trending football news...');
 
-  let items = await tryNewsAPI(count);
-  if (items.length > 0) { console.log(`[News] NewsAPI: ${items.length} items`); return items; }
+  // RSS is unlimited and always fresh
+  let items = await tryRSS(count);
+  if (items.length >= 3) {
+    console.log(`[News] RSS: ${items.length} items`);
+    return items;
+  }
 
-  items = await tryGNews(count);
-  if (items.length > 0) { console.log(`[News] GNews: ${items.length} items`); return items; }
+  // GNews as supplement (save the 100 req/day quota)
+  const gnewsItems = await tryGNews(count);
+  if (gnewsItems.length > 0) {
+    console.log(`[News] GNews supplement: ${gnewsItems.length} items`);
+    // Merge and deduplicate
+    const merged = [...items, ...gnewsItems];
+    const seen = new Set<string>();
+    const unique = merged.filter(i => {
+      const key = i.title.toLowerCase().slice(0, 40);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return unique.slice(0, count);
+  }
 
-  items = await tryGeminiTopics(count);
-  if (items.length > 0) { console.log(`[News] Gemini fallback: ${items.length} items`); return items; }
+  if (items.length > 0) return items;
 
-  console.log('[News] All sources failed');
+  console.log('[News] No news found');
   return [];
 }
 
-export async function fetchTopHeadlines(count: number = 3): Promise<NewsItem[]> {
+export async function fetchTopHeadlines(count: number = 10): Promise<NewsItem[]> {
   return fetchTrendingNews(count);
 }
