@@ -2,7 +2,6 @@ name: FootballPulse Auto Publish
 
 on:
   schedule:
-    # Toutes les 10 minutes — 144 runs/jour
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
